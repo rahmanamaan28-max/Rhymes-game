@@ -1,0 +1,27 @@
+body {
+  font-family: Arial;
+  background: #111;
+  color: white;
+  text-align: center;
+}
+
+button {
+  padding: 10px;
+  margin: 5px;
+  cursor: pointer;
+}
+
+input {
+  padding: 8px;
+  margin: 5px;
+}
+
+.chuck {
+  background: gold;
+  color: black;
+  padding: 5px;
+}
+
+.scoreboard {
+  margin-top: 20px;
+}
