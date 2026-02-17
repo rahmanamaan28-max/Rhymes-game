@@ -2,8 +2,12 @@ const socket = io();
 let roomCode = "";
 let username = "";
 let currentRoom = null;
+let isMyTurn = false;
 
 const app = document.getElementById("app");
+
+const quackSound = new Audio("https://actions.google.com/sounds/v1/animals/duck_quack.ogg");
+const winSound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
 
 function renderLayout(content, bottom = "") {
   app.innerHTML = `
@@ -39,7 +43,7 @@ socket.on("room_created", code => {
   roomCode = code;
   renderLayout(`
     <div class="card">
-      <div><b>Room Code:</b> ${code}</div>
+      <h3>Room Code: ${code}</h3>
       <button onclick="startPoints()">Points Mode</button>
       <button onclick="startRounds()">Rounds Mode</button>
     </div>
@@ -70,22 +74,27 @@ socket.on("reveal", room => {
 });
 
 socket.on("game_end", winner => {
+  winSound.play();
   renderLayout(`
     <div class="card">
-      <h2>🏆 Winner</h2>
-      <div>${winner.username}</div>
+      <h2>🏆 ${winner.username} Wins!</h2>
       <button onclick="location.reload()">Play Again</button>
     </div>
   `);
 });
 
 function renderGame(room) {
+  const me = room.players.find(p => p.id === socket.id);
+  isMyTurn = (room.phase === "chuck_word" && me.isChuck) ||
+             (room.phase === "rhyme" && !me.isChuck);
+
   let players = "";
   room.players.forEach(p => {
+    const quack = p.quackIndex ? "QUACK".slice(0, p.quackIndex) : "";
     players += `
       <div class="player ${p.isChuck ? "chuck" : ""}">
         <div>${p.isChuck ? "🦆 " : ""}${p.username}</div>
-        <div>${p.score} pts</div>
+        <div>${p.score} pts<br><span class="quack">${quack}</span></div>
       </div>
     `;
   });
@@ -95,18 +104,21 @@ function renderGame(room) {
     <div class="word-display">
       ${room.currentWord || "Waiting for Chuck..."}
     </div>
-    <div class="scoreboard">${players}</div>
+    ${players}
   `,
   `
     <div class="bottom-input">
-      <input id="input" placeholder="Type here..."/>
-      <button onclick="submit()">Send</button>
+      <input id="input" placeholder="${isMyTurn ? "Your turn..." : "Waiting..."}" ${isMyTurn ? "" : "disabled"}/>
+      <button onclick="submit()" ${isMyTurn ? "" : "disabled"}>Send</button>
     </div>
   `);
 }
 
 function submit() {
+  if (!isMyTurn) return;
+
   const val = document.getElementById("input").value;
+  if (!val) return;
 
   if (currentRoom.phase === "chuck_word") {
     socket.emit("submit_word", { code: roomCode, word: val });
@@ -122,12 +134,14 @@ function renderReveal(room) {
   for (let id in room.answers) {
     const p = room.players.find(x => x.id === id);
     answers += `
-      <div class="card">
+      <div class="card answer-reveal">
         <b>${p.username}</b><br>
         ${room.answers[id]}
       </div>
     `;
   }
+
+  quackSound.play();
 
   renderLayout(`
     <div class="word-display">${room.currentWord}</div>
