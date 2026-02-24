@@ -1,6 +1,6 @@
 {
-  "name": "rhymes-quack-ultra",
-  "version": "3.0.0",
+  "name": "rhymes-quack-ultra-final",
+  "version": "6.0.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
