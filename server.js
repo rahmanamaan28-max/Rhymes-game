@@ -9,14 +9,15 @@ const io = new Server(server);
 app.use(express.static("public"));
 
 const rooms = {};
+const AVATARS = ["🦊","🐼","🐵","🐸","🦁","🐯","🐨","🐰","🐻","🦄","🐙","🐢"];
 
 /* ================= WORD SYSTEM ================= */
 
 const WORD_BANK = {
-  easy: ["CAT","DOG","SUN","MOON","CAR","STAR","TREE","BALL","FISH","BOOK","HOUSE","DOOR","PLANE","WAVE","FLOOR"],
-  medium: ["RIVER","MAYOR","CANDLE","FLOWER","SILVER","TIGER","HUNGER","WATER","POCKET","MARKET","HERO"],
-  hard: ["ORANGE","PURPLE","CHAOS","RHYTHM","GHOST","DEPTH","WORLD","HEIGHT","BRIDGE","THOUGHT"],
-  expert: ["LUXURY","MEMORY","ENERGY","CATEGORY","VICTORY","MYSTERY","STRATEGY","TRAGEDY"]
+  easy:["CAT","DOG","SUN","MOON","CAR","STAR","TREE","BALL","FISH","BOOK"],
+  medium:["RIVER","MAYOR","FLOWER","SILVER","HUNGER","MARKET"],
+  hard:["ORANGE","PURPLE","CHAOS","RHYTHM","DEPTH"],
+  expert:["LUXURY","MEMORY","ENERGY","MYSTERY","STRATEGY"]
 };
 
 function updateDifficulty(room){
@@ -64,7 +65,9 @@ function startNewRound(code){
   room.answers={};
   room.timeLeft=20;
 
-  room.players.forEach(p=>p.isChuck=false);
+  room.players.forEach(p=>{
+    p.isChuck=false;
+  });
 
   const chuck=selectRandomChuck(room);
   chuck.isChuck=true;
@@ -77,19 +80,17 @@ function startNewRound(code){
 }
 
 function finishRound(code){
-
-  const room = rooms[code];
-  if(!room || !room.gameActive) return;
+  const room=rooms[code];
+  if(!room||!room.gameActive) return;
 
   calculateScores(room);
-
-  room.phase = "reveal";
+  room.phase="reveal";
 
   io.to(code).emit("reveal",{
-    currentWord: room.currentWord,
-    answers: room.answers,
-    players: room.players,
-    roundPoints: room.roundPoints
+    currentWord:room.currentWord,
+    answers:room.answers,
+    players:room.players,
+    roundPoints:room.roundPoints
   });
 
   clearTimer(room);
@@ -104,21 +105,19 @@ function handleRoundCompletion(code){
   if(room.mode==="points"){
     const winner=room.players.find(p=>p.score>=20);
     const alive=getAlivePlayers(room);
-
-    if(winner) return endGame(code,winner);
-    if(alive.length===1) return endGame(code,alive[0]);
+    if(winner) return endGame(code);
+    if(alive.length===1) return endGame(code);
 
     room.currentRound++;
-    return startNewRound(code);
+    startNewRound(code);
   }
 
   if(room.mode==="rounds"){
     if(room.currentRound>=room.maxRounds){
-      const winner=room.players.sort((a,b)=>b.score-a.score)[0];
-      return endGame(code,winner);
+      return endGame(code);
     }
     room.currentRound++;
-    return startNewRound(code);
+    startNewRound(code);
   }
 }
 
@@ -126,60 +125,58 @@ function handleRoundCompletion(code){
 
 function calculateScores(room){
 
-  const groups = {};
-  const roundPoints = {};
+  const groups={};
+  const roundPoints={};
 
-  // Initialize roundPoints
-  room.players.forEach(p => {
-    roundPoints[p.id] = 0;
+  room.players.forEach(p=>{
+    roundPoints[p.id]=0;
+    if(!p.streak) p.streak=0;
   });
 
   for(let id in room.answers){
-    const ans = room.answers[id];
-    if(!groups[ans]) groups[ans] = [];
+    const ans=room.answers[id];
+    if(!groups[ans]) groups[ans]=[];
     groups[ans].push(id);
   }
 
   Object.values(groups).forEach(group=>{
-    const count = group.length;
+    const count=group.length;
 
-    // SOLO
-    if(count === 1){
-      const player = room.players.find(p=>p.id===group[0]);
-
+    if(count===1){
+      const player=room.players.find(p=>p.id===group[0]);
+      player.streak=0;
       if(room.mode==="points"){
         player.quackIndex++;
         if(player.quackIndex>=5)
-          player.eliminated = true;
+          player.eliminated=true;
       }
-
       return;
     }
 
-    // MATCH GROUP
     group.forEach(id=>{
-      const player = room.players.find(p=>p.id===id);
+      const p=room.players.find(x=>x.id===id);
+      let gained=(count===2)?3:1;
 
-      let gained = 0;
+      if(count>=3)
+        gained=Math.floor(gained*1.5); // combo multiplier
 
-      if(count===2) gained = 3;
-      else gained = 1;
+      if(id===room.chuckId)
+        gained+=(count-1);
 
-      // Chuck bonus
-      if(id === room.chuckId)
-        gained += (count - 1);
+      if(group.includes(room.chuckId)&&id!==room.chuckId)
+        gained+=2;
 
-      if(group.includes(room.chuckId) && id !== room.chuckId)
-        gained += 2;
+      p.streak++;
+      if(p.streak===2) gained+=1;
+      if(p.streak>=3) gained+=2;
 
-      player.score += gained;
-      roundPoints[id] += gained;
+      p.score+=gained;
+      roundPoints[id]+=gained;
     });
   });
 
-  room.roundPoints = roundPoints;
+  room.roundPoints=roundPoints;
 
-  // SORT PLAYERS BY SCORE (RANKING)
   room.players.sort((a,b)=>b.score-a.score);
 }
 
@@ -211,112 +208,29 @@ function clearTimer(room){
   }
 }
 
-/* ================= END GAME ================= */
+/* ================= ELO ================= */
 
-function endGame(code,winner){
+function applyELO(room){
+  room.players.forEach((p,index)=>{
+    if(!p.elo) p.elo=1000;
+
+    if(index===0) p.elo+=25;
+    else if(index===1) p.elo+=10;
+    else if(index===2) p.elo+=5;
+    else p.elo-=10;
+
+    if(p.elo<0) p.elo=0;
+  });
+}
+
+function endGame(code){
   const room=rooms[code];
   if(!room) return;
 
+  applyELO(room);
+
   room.gameActive=false;
   clearTimer(room);
-  io.to(code).emit("game_end",winner);
+
+  io.to(code).emit("game_end",{players:room.players});
 }
-
-/* ================= SOCKET ================= */
-
-io.on("connection",socket=>{
-
-  socket.on("create_room",username=>{
-    const code=generateRoomCode();
-    rooms[code]={
-      players:[],
-      hostId:socket.id,
-      mode:null,
-      maxRounds:0,
-      currentRound:0,
-      phase:"lobby",
-      usedWords:[],
-      difficulty:"easy",
-      timer:null,
-      answers:{},
-      gameActive:false
-    };
-
-    socket.join(code);
-
-    rooms[code].players.push({
-      id:socket.id,
-      username,
-      score:0,
-      quackIndex:0,
-      eliminated:false,
-      isChuck:false
-    });
-
-    socket.emit("room_created",code);
-  });
-
-  socket.on("join_room",({code,username})=>{
-    const room=rooms[code];
-    if(!room) return;
-
-    socket.join(code);
-    room.players.push({
-      id:socket.id,
-      username,
-      score:0,
-      quackIndex:0,
-      eliminated:false,
-      isChuck:false
-    });
-
-    io.to(code).emit("room_update",room);
-  });
-
-  socket.on("start_game",({code,mode,rounds})=>{
-    const room=rooms[code];
-    if(!room||room.hostId!==socket.id) return;
-    if(room.players.length<2) return;
-
-    room.mode=mode;
-    room.maxRounds=mode==="rounds"?parseInt(rounds):Infinity;
-    room.currentRound=1;
-    room.usedWords=[];
-    room.gameActive=true;
-
-    room.players.forEach(p=>{
-      p.score=0;
-      p.quackIndex=0;
-      p.eliminated=false;
-    });
-
-    startNewRound(code);
-  });
-
-  socket.on("submit_answer",({code,answer})=>{
-
-  const room = rooms[code];
-  if(!room || room.phase !== "rhyme") return;
-
-  const player = room.players.find(p=>p.id===socket.id);
-  if(!player || player.eliminated) return;
-  if(room.answers[socket.id]) return;
-
-  answer = answer?.trim().toUpperCase();
-  if(!answer || answer === room.currentWord) return;
-
-  room.answers[socket.id] = answer;
-
-  const alive = getAlivePlayers(room).length;
-
-  // If everyone submitted → stop timer immediately
-  if(Object.keys(room.answers).length >= alive){
-
-    clearTimer(room);
-    finishRound(code); // instant reveal
-
-  }
-});
-
-});
-server.listen(3000,()=>console.log("Server running on 3000"));
