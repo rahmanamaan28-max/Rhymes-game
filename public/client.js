@@ -2,6 +2,7 @@ const socket=io();
 let roomCode="";
 let username="";
 let currentRoom=null;
+let submitted = false;
 
 const app=document.getElementById("app");
 
@@ -64,12 +65,28 @@ socket.on("timer",t=>{
   if(el) el.innerText="⏳ "+t;
 });
 
-socket.on("reveal",room=>{
-  let html=`<div class="card"><h3>${room.currentWord}</h3></div>`;
-  for(let id in room.answers){
-    const p=room.players.find(x=>x.id===id);
-    html+=`<div class="card">${p.username}: ${room.answers[id]}</div>`;
+socket.on("reveal",data=>{
+
+  const {currentWord,answers,players,roundPoints} = data;
+
+  let html = `
+    <h2>${currentWord}</h2>
+  `;
+
+  for(let id in answers){
+    const p = players.find(x=>x.id===id);
+
+    html += `
+      <div class="card">
+        ${p.avatar} <b>${p.username}</b>: 
+        ${answers[id]}
+        <span style="color:#4caf50;">
+          +${roundPoints[id]||0}
+        </span>
+      </div>
+    `;
   }
+
   render(html);
 });
 
@@ -81,13 +98,17 @@ socket.on("game_end",winner=>{
 
 function renderGame(room){
   let players="";
-  room.players.forEach(p=>{
-    players+=`
+  room.players.forEach((p,index)=>{
+  players+=`
     <div class="player ${p.isChuck?"chuck":""}">
-      ${p.isChuck?"🦆 ":""}${p.username}
+      <span>
+        #${index+1} ${p.avatar} 
+        ${p.isChuck?"🦆 ":""}${p.username}
+      </span>
       <span>${p.score}</span>
-    </div>`;
-  });
+    </div>
+  `;
+});
 
   render(`
   <div>Mode: ${room.mode} | Round ${room.currentRound}</div>
@@ -103,10 +124,22 @@ function renderGame(room){
   `);
 }
 
+let submitted = false;
+
 function submit(){
-  const val=document.getElementById("input").value;
+
+  if(submitted) return;
+
+  const val = document.getElementById("input").value;
+  if(!val) return;
+
   socket.emit("submit_answer",{code:roomCode,answer:val});
-  document.getElementById("input").value="";
+
+  submitted = true;
+
+  const input = document.getElementById("input");
+  input.disabled = true;
+  input.value = "Answer submitted ✔";
 }
 
 showLobby();
