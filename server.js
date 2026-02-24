@@ -117,35 +117,62 @@ function handleRoundCompletion(code){
 /* ================= SCORING ================= */
 
 function calculateScores(room){
-  const groups={};
+
+  const groups = {};
+  const roundPoints = {};
+
+  // Initialize roundPoints
+  room.players.forEach(p => {
+    roundPoints[p.id] = 0;
+  });
 
   for(let id in room.answers){
-    const ans=room.answers[id];
-    if(!groups[ans]) groups[ans]=[];
+    const ans = room.answers[id];
+    if(!groups[ans]) groups[ans] = [];
     groups[ans].push(id);
   }
 
   Object.values(groups).forEach(group=>{
-    const count=group.length;
+    const count = group.length;
 
-    if(count===1){
-      const p=room.players.find(x=>x.id===group[0]);
+    // SOLO
+    if(count === 1){
+      const player = room.players.find(p=>p.id===group[0]);
+
       if(room.mode==="points"){
-        p.quackIndex++;
-        if(p.quackIndex>=5) p.eliminated=true;
+        player.quackIndex++;
+        if(player.quackIndex>=5)
+          player.eliminated = true;
       }
+
       return;
     }
 
+    // MATCH GROUP
     group.forEach(id=>{
-      const p=room.players.find(x=>x.id===id);
-      if(count===2) p.score+=3;
-      else p.score+=1;
+      const player = room.players.find(p=>p.id===id);
 
-      if(id===room.chuckId) p.score+=(count-1);
-      if(group.includes(room.chuckId)&&id!==room.chuckId) p.score+=2;
+      let gained = 0;
+
+      if(count===2) gained = 3;
+      else gained = 1;
+
+      // Chuck bonus
+      if(id === room.chuckId)
+        gained += (count - 1);
+
+      if(group.includes(room.chuckId) && id !== room.chuckId)
+        gained += 2;
+
+      player.score += gained;
+      roundPoints[id] += gained;
     });
   });
+
+  room.roundPoints = roundPoints;
+
+  // SORT PLAYERS BY SCORE (RANKING)
+  room.players.sort((a,b)=>b.score-a.score);
 }
 
 /* ================= TIMER ================= */
