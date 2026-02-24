@@ -65,3 +65,24 @@ button{
   background:linear-gradient(90deg,#ffd54f,#ff9800);
   font-weight:600;
 }
+.float-points{
+  position:absolute;
+  right:10px;
+  color:#4caf50;
+  font-weight:bold;
+  animation:floatUp 1s ease-out forwards;
+}
+
+@keyframes floatUp{
+  0%{opacity:1; transform:translateY(0);}
+  100%{opacity:0; transform:translateY(-25px);}
+}
+
+.podium{
+  text-align:center;
+  font-size:20px;
+}
+
+.gold{color:gold;}
+.silver{color:silver;}
+.bronze{color:#cd7f32;}
