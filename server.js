@@ -77,13 +77,21 @@ function startNewRound(code){
 }
 
 function finishRound(code){
-  const room=rooms[code];
-  if(!room||!room.gameActive) return;
+
+  const room = rooms[code];
+  if(!room || !room.gameActive) return;
 
   calculateScores(room);
-  room.phase="reveal";
 
-  io.to(code).emit("reveal",room);
+  room.phase = "reveal";
+
+  io.to(code).emit("reveal",{
+    currentWord: room.currentWord,
+    answers: room.answers,
+    players: room.players,
+    roundPoints: room.roundPoints
+  });
+
   clearTimer(room);
 
   setTimeout(()=>handleRoundCompletion(code),4000);
@@ -286,22 +294,29 @@ io.on("connection",socket=>{
   });
 
   socket.on("submit_answer",({code,answer})=>{
-    const room=rooms[code];
-    if(!room||room.phase!=="rhyme") return;
 
-    const player=room.players.find(p=>p.id===socket.id);
-    if(!player||player.eliminated) return;
-    if(room.answers[socket.id]) return;
+  const room = rooms[code];
+  if(!room || room.phase !== "rhyme") return;
 
-    answer=answer?.trim().toUpperCase();
-    if(!answer||answer===room.currentWord) return;
+  const player = room.players.find(p=>p.id===socket.id);
+  if(!player || player.eliminated) return;
+  if(room.answers[socket.id]) return;
 
-    room.answers[socket.id]=answer;
+  answer = answer?.trim().toUpperCase();
+  if(!answer || answer === room.currentWord) return;
 
-    const alive=getAlivePlayers(room).length;
-    if(Object.keys(room.answers).length>=alive)
-      finishRound(code);
-  });
+  room.answers[socket.id] = answer;
+
+  const alive = getAlivePlayers(room).length;
+
+  // If everyone submitted → stop timer immediately
+  if(Object.keys(room.answers).length >= alive){
+
+    clearTimer(room);
+    finishRound(code); // instant reveal
+
+  }
+});
 
 });
 server.listen(3000,()=>console.log("Server running on 3000"));
