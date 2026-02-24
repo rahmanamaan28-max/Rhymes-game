@@ -96,6 +96,7 @@ socket.on("game_end",winner=>{
   <button onclick="location.reload()">Play Again</button>`);
 });
 
+let submitted=false;
 function renderGame(room){
   let players="";
   room.players.forEach((p,index)=>{
